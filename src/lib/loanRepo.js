@@ -81,3 +81,15 @@ export async function updateLoan(loan, client = getSupabase()) {
     return { loan: null, error: SAVE_ERROR_MESSAGE, sessionExpired: false }
   }
 }
+
+// เพิ่มหลาย Loan ในคำสั่งเดียว (ใช้ตอนย้ายข้อมูลเดิม) สำเร็จทั้งหมดหรือไม่สำเร็จเลย
+export async function createLoans(loans, client = getSupabase()) {
+  if (loans.length === 0) return { loans: [], error: null, sessionExpired: false }
+  try {
+    const { data, error } = await client.from('loans').insert(loans.map(loanToRow)).select()
+    if (error) return { loans: [], ...toResult(error, SAVE_ERROR_MESSAGE) }
+    return { loans: data.map(rowToLoan), error: null, sessionExpired: false }
+  } catch {
+    return { loans: [], error: SAVE_ERROR_MESSAGE, sessionExpired: false }
+  }
+}

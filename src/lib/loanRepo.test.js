@@ -151,6 +151,35 @@ describe('updateLoan', () => {
   })
 })
 
+describe('createLoans', () => {
+  const drafts = [
+    { ...rowToLoan(row), id: undefined, ownerId: undefined },
+    { ...rowToLoan(row), id: undefined, ownerId: undefined, itemName: 'ร่ม' },
+  ]
+
+  it('เพิ่มหลายรายการในคำสั่งเดียวและคืนรายการที่สร้าง', async () => {
+    const { client, builder } = fakeClient({ data: [row, { ...row, item_name: 'ร่ม' }], error: null })
+    const result = await repo.createLoans(drafts, client)
+    expect(builder.insert).toHaveBeenCalledTimes(1)
+    expect(builder.insert).toHaveBeenCalledWith(drafts.map(loanToRow))
+    expect(result.loans).toHaveLength(2)
+    expect(result.error).toBeNull()
+  })
+
+  it('รายการว่าง: ไม่เรียกฐานข้อมูล', async () => {
+    const { client } = fakeClient({ data: [], error: null })
+    const result = await repo.createLoans([], client)
+    expect(client.from).not.toHaveBeenCalled()
+    expect(result).toEqual({ loans: [], error: null, sessionExpired: false })
+  })
+
+  it('ไม่สำเร็จ: ข้อความไทย ไม่มีรายการที่ถูกเพิ่ม', async () => {
+    const { client } = fakeClient({ data: null, error: { message: 'x' } })
+    const result = await repo.createLoans(drafts, client)
+    expect(result).toEqual({ loans: [], error: repo.SAVE_ERROR_MESSAGE, sessionExpired: false })
+  })
+})
+
 describe('ไม่มีการลบ Loan', () => {
   it('ไม่มี export ที่เกี่ยวกับ delete/remove', () => {
     expect(Object.keys(repo).some((name) => /delete|remove|destroy/i.test(name))).toBe(false)

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import './App.css'
+import LegacyImport from './components/LegacyImport.jsx'
 import LoanForm from './components/LoanForm.jsx'
 import LoanList from './components/LoanList.jsx'
 import LoginForm from './components/LoginForm.jsx'
@@ -7,7 +8,14 @@ import SearchBox from './components/SearchBox.jsx'
 import ThemeToggle from './components/ThemeToggle.jsx'
 import { onSessionChange, signIn, signOut } from './lib/auth.js'
 import { toIsoDate } from './lib/dateFormat.js'
-import { SESSION_EXPIRED_MESSAGE, createLoan, fetchLoans, updateLoan } from './lib/loanRepo.js'
+import { isLegacyImported, markLegacyImported, readLegacyLoans } from './lib/legacyImport.js'
+import {
+  SESSION_EXPIRED_MESSAGE,
+  createLoan,
+  createLoans,
+  fetchLoans,
+  updateLoan,
+} from './lib/loanRepo.js'
 import { filterLoansByFriend, markReturned, unmarkReturned } from './lib/loanRules.js'
 import { getSupabase } from './lib/supabaseClient.js'
 import { getInitialTheme, saveTheme, toggleTheme } from './lib/theme.js'
@@ -21,6 +29,10 @@ function LoanManager({ onSessionExpired }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [editingId, setEditingId] = useState(null)
   const [query, setQuery] = useState('')
+  const [legacy, setLegacy] = useState(null) // ข้อมูลเดิมที่รอเจ้าของตัดสินใจนำเข้า
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState(null)
+  const [importResult, setImportResult] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -38,6 +50,11 @@ function LoanManager({ onSessionExpired }) {
       setMessage(null)
       setLoans(fetched)
       setLoadState('ready')
+      // ถามย้ายข้อมูลเดิมเฉพาะเมื่อบัญชีนี้ยังไม่มี Loan และยังไม่เคยตัดสินใจ
+      if (fetched.length === 0 && !isLegacyImported()) {
+        const found = readLegacyLoans()
+        if (found.loans.length > 0 || found.skipped.length > 0 || found.warning) setLegacy(found)
+      }
     })
     return () => {
       cancelled = true
@@ -88,6 +105,34 @@ function LoanManager({ onSessionExpired }) {
     applyResult(await updateLoan(unmarkReturned(loan)))
   }
 
+  const handleImport = async () => {
+    setImporting(true)
+    setImportError(null)
+    const result = await createLoans(legacy.loans)
+    setImporting(false)
+    if (result.sessionExpired) {
+      onSessionExpired()
+      return
+    }
+    if (result.error) {
+      // นำเข้าไม่สำเร็จ: ไม่ทำเครื่องหมายว่าย้ายแล้ว ข้อมูลเดิมยังอยู่ครบและลองใหม่ได้
+      setImportError(result.error)
+      return
+    }
+    markLegacyImported()
+    setLoans((prev) => [...prev, ...result.loans])
+    setImportResult({ imported: result.loans.length, skipped: legacy.skipped })
+    setLegacy(null)
+  }
+
+  // ไม่นำเข้า/ปิดแผง: ทำเครื่องหมายว่าตัดสินใจแล้ว จะไม่ถามอีก (ข้อมูลเดิมในเบราว์เซอร์ไม่ถูกลบ)
+  const handleDismissImport = () => {
+    markLegacyImported()
+    setLegacy(null)
+    setImportResult(null)
+    setImportError(null)
+  }
+
   if (loadState === 'loading') return <p>กำลังโหลดรายการ...</p>
 
   if (loadState === 'error') {
@@ -106,6 +151,14 @@ function LoanManager({ onSessionExpired }) {
   return (
     <>
       {message && <p role="alert">{message}</p>}
+      <LegacyImport
+        legacy={legacy}
+        result={importResult}
+        busy={importing}
+        error={importError}
+        onImport={handleImport}
+        onDismiss={handleDismissImport}
+      />
       <LoanForm
         key={editingLoan?.id ?? 'new'}
         today={today}
