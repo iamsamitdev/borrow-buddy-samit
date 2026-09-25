@@ -65,7 +65,7 @@
 - [x] T6.1 ติดตั้ง `@supabase/supabase-js`, สร้าง `.env.example` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`), ตรวจว่า `.env` อยู่ใน `.gitignore`
 - [x] T6.2 `supabaseClient.js`: สร้าง client จาก env และแจ้งข้อผิดพลาดชัดเจนเมื่อ env ขาด
 - [x] T6.3 `loanRepo.js`: ฟังก์ชันแปลง snake_case <-> camelCase + เทสต์
-- [ ] T6.4 `loanRepo.js`: ดึงรายการ, เพิ่ม, แก้ไข (รวมกดคืน/ยกเลิกคืน) ไม่มีฟังก์ชันลบ, คืนข้อผิดพลาดเป็นข้อความภาษาไทย
+- [x] T6.4 `loanRepo.js`: ดึงรายการ, เพิ่ม, แก้ไข (รวมกดคืน/ยกเลิกคืน) ไม่มีฟังก์ชันลบ, คืนข้อผิดพลาดเป็นข้อความภาษาไทย
 - [ ] T6.5 `auth.js`: `signIn(email, password)`, `signOut()`, ดู/ติดตามสถานะ session (ไม่มีฟังก์ชันสมัคร)
 - [ ] T6.6 `legacyImport.js`: อ่าน Loan เดิมจาก localStorage, ตรวจด้วย `loanRules.js`, รายงานรายการที่ข้าม, JSON เสียไม่ทำให้พัง + เทสต์ (ไม่ลบข้อมูลเดิม)
 - [ ] T6.7 เลิกใช้ `storage.js` เดิมในแอป (ไม่ลบไฟล์ ถามก่อนถ้าจะลบ)

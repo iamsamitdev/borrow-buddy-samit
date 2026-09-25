@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import * as repo from './loanRepo.js'
 import { loanToRow, rowToLoan } from './loanRepo.js'
 
 const row = {
@@ -56,5 +57,102 @@ describe('loanToRow', () => {
 
   it('ยกเลิกการคืนส่ง returned_date เป็น null', () => {
     expect(loanToRow({ ...loan, returnedDate: undefined }).returned_date).toBeNull()
+  })
+})
+
+// ---- ส่วนที่เรียก Supabase (ใช้ client จำลอง) ----
+// query builder จำลอง: ทุกเมธอดคืนตัวเอง และ await ได้ผลลัพธ์ที่กำหนด
+function fakeClient(result) {
+  const calls = []
+  const builder = {
+    then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
+  }
+  for (const name of ['select', 'insert', 'update', 'eq', 'single']) {
+    builder[name] = vi.fn((...args) => {
+      calls.push([name, args])
+      return builder
+    })
+  }
+  return { client: { from: vi.fn(() => builder) }, builder, calls }
+}
+
+describe('fetchLoans', () => {
+  it('คืนรายการที่แปลงเป็น camelCase แล้ว', async () => {
+    const { client } = fakeClient({ data: [row], error: null })
+    const result = await repo.fetchLoans(client)
+    expect(client.from).toHaveBeenCalledWith('loans')
+    expect(result.loans).toEqual([rowToLoan(row)])
+    expect(result.error).toBeNull()
+  })
+
+  it('ผิดพลาดทั่วไป: ข้อความไทย รายการว่าง ไม่ใช่ session หมดอายุ', async () => {
+    const { client } = fakeClient({ data: null, error: { message: 'boom' } })
+    const result = await repo.fetchLoans(client)
+    expect(result).toEqual({ loans: [], error: repo.LOAD_ERROR_MESSAGE, sessionExpired: false })
+  })
+
+  it('JWT หมดอายุ: แจ้งเซสชันหมดอายุ', async () => {
+    const { client } = fakeClient({ data: null, error: { code: 'PGRST301' } })
+    const result = await repo.fetchLoans(client)
+    expect(result.error).toBe(repo.SESSION_EXPIRED_MESSAGE)
+    expect(result.sessionExpired).toBe(true)
+  })
+
+  it('เกิด exception ไม่พัง', async () => {
+    const client = {
+      from: () => {
+        throw new Error('network')
+      },
+    }
+    const result = await repo.fetchLoans(client)
+    expect(result.error).toBe(repo.LOAD_ERROR_MESSAGE)
+  })
+})
+
+describe('createLoan', () => {
+  const draft = { ...rowToLoan(row), id: undefined, ownerId: undefined }
+
+  it('ส่งเฉพาะฟิลด์ที่อนุญาต และคืน Loan ที่สร้าง', async () => {
+    const { client, builder } = fakeClient({ data: row, error: null })
+    const result = await repo.createLoan(draft, client)
+    expect(builder.insert).toHaveBeenCalledWith(loanToRow(draft))
+    expect(result.loan).toEqual(rowToLoan(row))
+    expect(result.error).toBeNull()
+  })
+
+  it('บันทึกไม่ได้: ข้อความไทย loan เป็น null', async () => {
+    const { client } = fakeClient({ data: null, error: { message: 'x' } })
+    const result = await repo.createLoan(draft, client)
+    expect(result).toEqual({ loan: null, error: repo.SAVE_ERROR_MESSAGE, sessionExpired: false })
+  })
+
+  it('RLS ปฏิเสธ (42501): แจ้งเซสชันหมดอายุ', async () => {
+    const { client } = fakeClient({ data: null, error: { code: '42501' } })
+    const result = await repo.createLoan(draft, client)
+    expect(result.sessionExpired).toBe(true)
+  })
+})
+
+describe('updateLoan', () => {
+  it('อัปเดตตาม id และคืน Loan ที่แก้แล้ว (รวมกดคืนแล้ว)', async () => {
+    const returned = { ...rowToLoan(row), returnedDate: '2026-09-05' }
+    const { client, builder } = fakeClient({ data: { ...row, returned_date: '2026-09-05' }, error: null })
+    const result = await repo.updateLoan(returned, client)
+    expect(builder.update).toHaveBeenCalledWith(loanToRow(returned))
+    expect(builder.eq).toHaveBeenCalledWith('id', row.id)
+    expect(result.loan.returnedDate).toBe('2026-09-05')
+  })
+
+  it('ไม่พบแถว/ผิดพลาด: ข้อความไทย', async () => {
+    const { client } = fakeClient({ data: null, error: { code: 'PGRST116' } })
+    const result = await repo.updateLoan(rowToLoan(row), client)
+    expect(result.error).toBe(repo.SAVE_ERROR_MESSAGE)
+    expect(result.loan).toBeNull()
+  })
+})
+
+describe('ไม่มีการลบ Loan', () => {
+  it('ไม่มี export ที่เกี่ยวกับ delete/remove', () => {
+    expect(Object.keys(repo).some((name) => /delete|remove|destroy/i.test(name))).toBe(false)
   })
 })
