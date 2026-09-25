@@ -195,3 +195,54 @@ section + section {
   gap: 8px;
   margin-top: 8px;
 }
+
+/* v2: ปุ่มในหัวเรื่อง (ธีม + ออกจากระบบ) */
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* v2: หน้าเข้าสู่ระบบ คอลัมน์เดียวทุกขนาดจอ (ต้องอยู่หลัง media query ของ form) */
+.login-form {
+  max-width: 420px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  grid-template-columns: 1fr;
+}
+
+/* v2: แผงย้ายข้อมูลเดิม */
+.legacy-import {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--outstanding-border);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+
+.legacy-import h2,
+.legacy-import p {
+  margin: 0;
+}
+
+.legacy-import ul {
+  margin: 0;
+  padding-left: 24px;
+}
+
+.legacy-import p[role='alert'] {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--overdue-border);
+  background: var(--overdue-bg);
+  color: var(--overdue);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
