@@ -5,6 +5,7 @@ import LoanForm from './components/LoanForm.jsx'
 import LoanList from './components/LoanList.jsx'
 import LoginForm from './components/LoginForm.jsx'
 import SearchBox from './components/SearchBox.jsx'
+import TabBar from './components/TabBar.jsx'
 import ThemeToggle from './components/ThemeToggle.jsx'
 import { onSessionChange, signIn, signOut } from './lib/auth.js'
 import { toIsoDate } from './lib/dateFormat.js'
@@ -16,7 +17,16 @@ import {
   fetchLoans,
   updateLoan,
 } from './lib/loanRepo.js'
-import { filterLoansByFriend, markReturned, unmarkReturned } from './lib/loanRules.js'
+import {
+  STATUS,
+  STATUS_LABEL,
+  filterLoansByFriend,
+  getLoanStatus,
+  groupLoans,
+  markReturned,
+  unmarkReturned,
+} from './lib/loanRules.js'
+import { ADD_TAB, getEmptyMessage, pickDefaultTab } from './lib/loanTabs.js'
 import { getSupabase } from './lib/supabaseClient.js'
 import { getInitialTheme, saveTheme, toggleTheme } from './lib/theme.js'
 
@@ -29,6 +39,8 @@ function LoanManager({ onSessionExpired }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [editingId, setEditingId] = useState(null)
   const [query, setQuery] = useState('')
+  const [tab, setTab] = useState(null) // null = ใช้แท็บเริ่มต้น (แท็บแรกที่มี Loan) จนกว่าเจ้าของจะเลือกเอง
+  const [returnTab, setReturnTab] = useState(null) // แท็บที่ดูอยู่ก่อนกดแก้ไข ใช้กลับมาเมื่อยกเลิก
   const [legacy, setLegacy] = useState(null) // ข้อมูลเดิมที่รอเจ้าของตัดสินใจนำเข้า
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState(null)
@@ -69,16 +81,18 @@ function LoanManager({ onSessionExpired }) {
   const today = toIsoDate(new Date())
   const editingLoan = loans.find((loan) => loan.id === editingId) ?? null
   const visibleLoans = filterLoansByFriend(loans, query)
+  const groups = groupLoans(visibleLoans, today)
+  const activeTab = tab ?? pickDefaultTab(groups)
 
-  // คืน true เมื่อบันทึกสำเร็จ ผลลัพธ์จาก loanRepo ทุกตัวผ่านฟังก์ชันนี้
+  // คืน Loan ที่บันทึกแล้ว หรือ null เมื่อไม่สำเร็จ ผลลัพธ์จาก loanRepo ทุกตัวผ่านฟังก์ชันนี้
   const applyResult = (result) => {
     if (result.sessionExpired) {
       onSessionExpired()
-      return false
+      return null
     }
     if (result.error) {
       setMessage(result.error)
-      return false
+      return null
     }
     setMessage(null)
     const saved = result.loan
@@ -87,14 +101,30 @@ function LoanManager({ onSessionExpired }) {
         ? prev.map((l) => (l.id === saved.id ? saved : l))
         : [...prev, saved],
     )
-    return true
+    return saved
   }
 
   // Loan ที่ยังไม่มี id คือเพิ่มใหม่ ถ้ามี id คือแก้ไขรายการเดิม
+  // สำเร็จแล้วไปแท็บตามสถานะของ Loan ที่บันทึก คืน true/false ให้ฟอร์มรู้ว่าล้างข้อมูลได้หรือไม่
   const handleSave = async (loan) => {
     const saved = applyResult(loan.id ? await updateLoan(loan) : await createLoan(loan))
-    if (saved) setEditingId(null)
-    return saved
+    if (!saved) return false
+    setEditingId(null)
+    setReturnTab(null)
+    setTab(getLoanStatus(saved, today))
+    return true
+  }
+
+  const handleEdit = (loan) => {
+    setReturnTab(activeTab)
+    setEditingId(loan.id)
+    setTab(ADD_TAB)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingId(null)
+    setTab(returnTab)
+    setReturnTab(null)
   }
 
   const handleMarkReturned = async (loan, returnedDate) => {
@@ -159,21 +189,43 @@ function LoanManager({ onSessionExpired }) {
         onImport={handleImport}
         onDismiss={handleDismissImport}
       />
-      <LoanForm
-        key={editingLoan?.id ?? 'new'}
-        today={today}
-        editingLoan={editingLoan}
-        onSave={handleSave}
-        onCancelEdit={() => setEditingId(null)}
+      <TabBar
+        tabs={[
+          ...[STATUS.OVERDUE, STATUS.OUTSTANDING, STATUS.RETURNED].map((status) => ({
+            key: status,
+            label: STATUS_LABEL[status],
+            tone: status,
+            count: groups[status].length,
+          })),
+          { key: ADD_TAB, label: editingLoan ? 'แก้ไขการยืม' : 'เพิ่มการยืม', tone: 'add' },
+        ]}
+        active={activeTab}
+        onChange={setTab}
       />
-      <SearchBox value={query} onChange={setQuery} />
-      <LoanList
-        loans={visibleLoans}
-        today={today}
-        onMarkReturned={handleMarkReturned}
-        onUnmarkReturned={handleUnmarkReturned}
-        onEdit={(loan) => setEditingId(loan.id)}
-      />
+      <div role="tabpanel" id="tab-panel" aria-labelledby={`tab-${activeTab}`} className="tab-panel">
+        {activeTab === ADD_TAB ? (
+          <LoanForm
+            key={editingLoan?.id ?? 'new'}
+            today={today}
+            editingLoan={editingLoan}
+            onSave={handleSave}
+            onCancelEdit={handleCancelEdit}
+          />
+        ) : (
+          <>
+            <SearchBox value={query} onChange={setQuery} />
+            <LoanList
+              loans={visibleLoans}
+              status={activeTab}
+              today={today}
+              emptyMessage={getEmptyMessage(activeTab, query.trim() !== '')}
+              onMarkReturned={handleMarkReturned}
+              onUnmarkReturned={handleUnmarkReturned}
+              onEdit={handleEdit}
+            />
+          </>
+        )}
+      </div>
     </>
   )
 }
