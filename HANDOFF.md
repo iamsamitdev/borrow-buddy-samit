@@ -77,3 +77,15 @@ commit แรกของ repository คือ `ee81221` (เอกสาร + `
 - `package-lock.json` ถูก commit ไว้ ไม่ได้อยู่ใน `.gitignore`
 - `src/components/.gitkeep` และ `src/lib/.gitkeep` เก็บไว้ ห้ามลบโดยไม่ถาม
 - `oxlint` มากับเทมเพลต (`npm run lint`)
+
+## เวอร์ชัน 2 (Supabase + เข้าสู่ระบบ) สถานะ 2026-09-25
+
+รายละเอียดอยู่ใน [design.md](./design.md) (เวอร์ชัน 2) และ [Tasks.md](./Tasks.md) เฟส 5–8
+
+- เสร็จ: เฟส 5 (ยกเว้น T5.4), เฟส 6, เฟส 7, T8.1, T8.6 (เทสต์ 111 ข้อผ่าน)
+- Supabase: ตาราง `loans` + RLS (SELECT/INSERT/UPDATE เฉพาะเจ้าของแถว ไม่มี DELETE) ทดสอบ RLS แล้ว ค่าเชื่อมต่ออยู่ใน `.env` (ไม่ commit) ดูตัวอย่างที่ `.env.example`
+- **ค้าง (ต้องให้เจ้าของทำเองใน Supabase Dashboard):** T5.4 ปิด "Allow new users to sign up" และสร้างบัญชีเจ้าของ (ตอนตรวจ `disable_signup` ยังเป็น false)
+- **ค้างหลัง T5.4:** T8.2, T8.3, T8.4 (ต้องล็อกอินจริง/มีบัญชีที่สอง) และ T8.5 ส่วนมือถือ
+- `src/lib/storage.js` ยังอยู่แต่แอปไม่ใช้แล้ว (ใช้แค่ค่าคีย์ใน `legacyImport.js`) การลบต้องถามผู้ใช้ก่อน
+- session นี้ agent `git-manager` ไม่ถูกลงทะเบียน จึงใช้ agent ทั่วไปทำ commit ตามกติกาเดียวกัน
+
